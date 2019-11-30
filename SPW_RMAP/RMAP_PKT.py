@@ -17,7 +17,7 @@ class RMAP_PKT:
   def __init__(self, rmap_cmd=None):
     # This will consist of a bytestream that contains the path
     self.dest_path_addr = bytearray()
-    # This will contain a byte representing the dst device ID
+    # This will contain a byte representing the dest device ID
     self.dest_logical_addr = None
     # This will consist of a bytestream that contains the path
     self.src_path_addr = bytearray()
@@ -77,11 +77,13 @@ class RMAP_PKT:
     # End while statement
 
     # The path addressing should be pulled off and 
-    # the dst logical address is at the start of the bytestream
-    # Store the dst logical bytes
+    # the dest logical address is at the start of the bytestream
+    # Store the dest logical bytes
     self.dest_logical_addr = rmap_cmd_copy.pop(0)
 
     # Protocol ID is now at the front
+    self.protocol_id = rmap_cmd_copy.pop(0)
+
     # Packet Type, Command, Source Path Addr Len is at the front
     byte_to_parse = rmap_cmd_copy.pop(0)
     # This byte has the format as follows
@@ -96,24 +98,24 @@ class RMAP_PKT:
     # Parse out the packet type, command, and source path address length
     packet_type = (byte_to_parse & 0xC0) >> 6
     command = (byte_to_parse & 0x3C) >> 2
-    source_packet_length = (byte_to_parse & 0x3)
+    src_addr_len = (byte_to_parse & 0x3)
 
     # Store the parsed variables
     self.packet_type = packet_type
     self.command = command
-    self.source_packet_length = source_packet_length
+    self.src_addr_len = src_addr_len
 
     # Desination key is now at the front
     # Store the destination id byte
     self.dest_key = rmap_cmd_copy.pop(0)
 
     # If source packet length is not 0, we need to process the source path address
-    if (self.source_packet_length != 0):
+    if (self.src_addr_len != 0):
       # Process source packet length
-      self.src_path_addr = rmap_cmd_copy[0:self.source_packet_length]
+      self.src_path_addr = rmap_cmd_copy[0:self.src_addr_len]
 
       # Pop the bytes that are being used
-      rmap_cmd_copy = rmap_cmd_copy[self.source_packet_length:]
+      rmap_cmd_copy = rmap_cmd_copy[self.src_addr_len:]
 
     # Source logical address is now at the front
     # Store the source logical address byte
@@ -160,5 +162,72 @@ class RMAP_PKT:
     # Completed parsing the bytestrean
   # end decode
 
-  def encode():
-    pass
+  def encode(self):
+    # Create an empty bytestream that will contain all the components
+    encoded_bytestream = bytearray()
+
+    # Add back the source path addressing
+    # If there was no path addressing, it will be an empty bytearray
+    encoded_bytestream.extend(self.dest_path_addr)
+
+    # Add back the destination logical address
+    dest_addr_byte = self.dest_logical_addr.to_bytes(length=1, byteorder='big')
+    encoded_bytestream.extend(dest_addr_byte)
+
+    # Add back the protocol id
+    protocol_id_byte = self.protocol_id.to_bytes(length=1, byteorder='big')
+    encoded_bytestream.extend(protocol_id_byte)
+
+    # Add back the packet type, command, source path addr len
+    built_cmd_int = 0
+    built_cmd_int |= (self.packet_type & 0x3) << 6
+    built_cmd_int |= (self.command & 0xF) << 2
+    built_cmd_int |= (self.src_addr_len & 0x3)
+    # Convert the built int into a byte
+    built_cmd_byte = built_cmd_int.to_bytes(length=1, byteorder='big')
+    encoded_bytestream.extend(built_cmd_byte)
+
+    # Add back the destination key
+    dest_key_byte = self.dest_key.to_bytes(length=1, byteorder='big')
+    encoded_bytestream.extend(dest_key_byte)
+
+    # Add back the source path addressing
+    # If there was no path addressing, it will be an empty bytearray
+    encoded_bytestream.extend(self.src_path_addr)
+
+    # Add back the source logical address
+    src_logical_addr_byte = self.src_logical_addr.to_bytes(length=1, byteorder='big')
+    encoded_bytestream.extend(src_logical_addr_byte)
+
+    # Add back the transaction id bytes
+    transaction_id_bytes = self.transation_id.to_bytes(length=2, byteorder='big')
+    encoded_bytestream.extend(transaction_id_bytes)
+
+    # Add back the extended write address
+    extended_addr_bytes = self.extended_addr.to_bytes(length=1, byteorder='big')
+    encoded_bytestream.extend(extended_addr_bytes)
+
+    # Add back the write address (4 bytes)
+    memory_address_bytes = self.mem_addr.to_bytes(length=4, byteorder='big')
+    encoded_bytestream.extend(memory_address_bytes)
+
+    # Add back data length (3 bytes)
+    data_length_bytes = self.data_len.to_bytes(length=3, byteorder='big')
+    encoded_bytestream.extend(data_length_bytes)
+
+    # Add back the header CRC
+    # This is the one passed into the original, will not be calculated
+    header_crc_bytes = self.header_crc.to_bytes(length=1, byteorder='big')
+    encoded_bytestream.extend(header_crc_bytes)
+
+    # Add back the data
+    # Data is stored as a bytestream
+    encoded_bytestream.extend(self.data)
+
+    # Add back the data CRC
+    data_crc_bytes = self.data_crc.to_bytes(length=1, byteorder='big')
+    encoded_bytestream.extend(data_crc_bytes)
+
+    # Return the encoded bytestream
+    return encoded_bytestream
+  # End encode
